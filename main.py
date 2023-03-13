@@ -1,0 +1,106 @@
+import http.client
+from xml.etree import cElementTree as ElementTree
+from XML import *
+import pandas as pd
+
+clientid = "52e03cb779352cb1a4665642fdca25fe"
+apikey = "28d386dd30329b4a7975ec458409c424"
+
+
+
+EVANO = "8002549" #Ahrensburg = 8000446, Winsen = 8006484, Ham HBF = 8002549
+DATE = "230313"#YYMMDD
+HOUR = "13" #HH
+
+def drop(I, dict):
+    for i in I:
+        try: 
+            dict = dict.drop(columns=[i])
+        except:
+            pass
+    return dict
+
+def getPlan(date, hour, evano):
+    headers = {
+    'DB-Client-Id': clientid,
+    'DB-Api-Key': apikey,
+    'accept': "application/xml"}
+    conn = http.client.HTTPSConnection("apis.deutschebahn.com")
+    request = str("/db-api-marketplace/apis/timetables/v1/plan/")+evano+"/"+date+"/"+hour
+    conn.request("GET", request, headers=headers)
+    res = conn.getresponse()
+    data = res.read()
+    root = ElementTree.XML(data.decode("utf-8"))
+    return XmlDictConfig(root)
+
+def getRecChg(evano):
+    headers = {
+    'DB-Client-Id': clientid,
+    'DB-Api-Key': apikey,
+    'accept': "application/xml"}
+    conn = http.client.HTTPSConnection("apis.deutschebahn.com")
+    request = str("/db-api-marketplace/apis/timetables/v1/rchg/")+evano
+    conn.request("GET", request, headers=headers)
+    res = conn.getresponse()
+    data = res.read()
+    root = ElementTree.XML(data.decode("utf-8"))
+    return XmlDictConfig(root)
+
+def getComChg(evano):
+    headers = {
+    'DB-Client-Id': clientid,
+    'DB-Api-Key': apikey,
+    'accept': "application/xml"}
+    conn = http.client.HTTPSConnection("apis.deutschebahn.com")
+    request = str("/db-api-marketplace/apis/timetables/v1/fchg/")+evano
+    conn.request("GET", request, headers=headers)
+    res = conn.getresponse()
+    data = res.read()
+    root = ElementTree.XML(data.decode("utf-8"))
+    return XmlDictConfig(root)
+
+delays = getComChg(EVANO)
+delays = pd.json_normalize(delays['s'])
+delays = drop(['ar.m.t', 'eva', 'ar.cpth', 'ar.cs', 'ar.clt', 'dp.cpth', 'dp.cs', 'dp.clt', 'ar.cp', 'dp.cp', 'ar.m.ts', 'dp.m.ts', 'ar.m.c', 'dp.m.c', 'ar.m', 'dp.m', 'dp.m.t', 'ar.m.ts-tts', 'dp.m.ts-tts', 'dp.m.id', 'ar.m.id'], delays)
+# print(delays)
+# print("\n\nPLAN:")
+
+plan = None
+for hour in range(0,24):
+    planHour = getPlan(DATE, str(hour).zfill(2), EVANO)
+    try:
+        planHour = pd.json_normalize(planHour['s'])
+        planHour = drop(['ar.pde', 'dp.pde', 'tl.f', 'tl.t', 'tl.n', 'tl.c', 'tl.o', 'ar.ppth', 'dp.ppth', 'ar.pp'], planHour)
+        plan = pd.concat([plan, planHour])
+    except:
+        pass
+
+#print(plan)
+
+# ids = []
+# for id in plan['id']:
+#     print(id)
+#     ids.append(id)
+i = 0
+table = pd.DataFrame()
+for d_id, d_ar_ct, d_ar_l, d_dp_ct, d_dp_l in zip(delays['id'], delays['ar.ct'], delays['ar.l'], delays['dp.ct'], delays['dp.l']):
+    for p_id, p_ar_pt, p_ar_l, p_dp_pt, p_dp_pp, p_dp_l in zip(plan['id'], plan['ar.pt'], plan['ar.l'], plan['dp.pt'], plan['dp.pp'], plan['dp.l']):
+        if p_id == d_id:
+            try:
+                d = str(int(d_dp_ct)-int(p_dp_pt))
+            except:
+                d = 'canceled'
+            if d_dp_l != d_dp_l:
+                line = p_dp_l
+            else:
+                line = d_dp_l
+            if line != line:
+                continue
+            temp = pd.DataFrame([[d_id, p_dp_pt,      d_dp_ct,        line,   p_dp_pp,    d]],
+                        columns=['id',  'dep. plan', 'dep. cur.', 'line', 'platform', 'delay'],
+                        index=[i])
+            table=pd.concat([table, temp])
+            i+=1
+table.sort_values('dep. plan')
+table.reset_index()
+print(table)
