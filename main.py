@@ -3,11 +3,9 @@ from xml.etree import cElementTree as ElementTree
 from XML import *
 import pandas as pd
 import time
-clientid = "52e03cb779352cb1a4665642fdca25fe"
-apikey = "28d386dd30329b4a7975ec458409c424"
-# clientid = "4b20783637b74f5655ca2363f31f5594"
-# apikey = "14ad2eeee362b17212cd4ce382cd2453"
-
+import os
+clientid = os.getenv("client_ID")
+apikey = os.getenv("API_KEY")
 
 EVANO = "8002549" #Ahrensburg = 8000446, Winsen = 8006484, Ham HBF = 8002549 8002549
 DATE = "230314"#YYMMDD
